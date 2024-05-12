@@ -13,6 +13,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,11 +26,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
-import com.example.movieappmad24.viewmodels.MoviesViewModel
+import com.example.movieappmad24.dependencyinjection.Injector
+import com.example.movieappmad24.viewmodels.DetailViewModel
 import com.example.movieappmad24.widgets.HorizontalScrollableImageView
 import com.example.movieappmad24.widgets.MovieRow
 import com.example.movieappmad24.widgets.SimpleTopAppBar
@@ -37,42 +41,45 @@ import com.example.movieappmad24.widgets.SimpleTopAppBar
 fun DetailScreen(
     movieId: String?,
     navController: NavController,
-    moviesViewModel: MoviesViewModel
 ) {
-
-    movieId?.let {
-        val movie = moviesViewModel.movies.filter { movie -> movie.id == movieId }[0]
-
-
-        Scaffold (
-            topBar = {
-                SimpleTopAppBar(title = movie.title) {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Go back"
-                        )
+    val detailViewModel: DetailViewModel = viewModel(factory = Injector.provideMoviesViewModelFactory(context = LocalContext.current))
+    movieId?.let { id ->
+        LaunchedEffect(movieId) {
+            detailViewModel.getMovieById(movieId)
+        }
+        val movieState by detailViewModel.movie.collectAsState()
+        movieState?.let { movieWithImage ->
+            val movie = movieWithImage.movie
+            Scaffold (
+                topBar = {
+                    SimpleTopAppBar(title = movie.title) {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(
+                                imageVector = Icons.Filled.ArrowBack,
+                                contentDescription = "Go back"
+                            )
+                        }
                     }
                 }
-            }
-        ){ innerPadding ->
-            Column {
-                MovieRow(
-                    modifier = Modifier.padding(innerPadding),
-                    movie = movie,
-                    onFavoriteClick = { id -> moviesViewModel.toggleFavoriteMovie(id) }
+            ){ innerPadding ->
+                Column {
+                    MovieRow(
+                        movieWithImages = movieWithImage,
+                        modifier = Modifier.padding(innerPadding),
+                        onFavoriteClick = { detailViewModel.updateFavorite(movie) }
                     )
 
-                Divider(modifier = Modifier.padding(4.dp))
+                    Divider(modifier = Modifier.padding(4.dp))
 
-                Column {
-                    Text("Movie Trailer")
-                    VideoPlayer(trailerURL = movie.trailer)
+                    Column {
+                        Text("Movie Trailer")
+                        VideoPlayer(trailerURL = movie.trailer)
+                    }
+
+                    Divider(modifier = Modifier.padding(4.dp))
+
+                    HorizontalScrollableImageView(movieWithImages = movieWithImage)
                 }
-
-                Divider(modifier = Modifier.padding(4.dp))
-
-                HorizontalScrollableImageView(movie = movie)
             }
         }
     }

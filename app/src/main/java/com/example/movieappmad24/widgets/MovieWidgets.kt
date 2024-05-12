@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,29 +52,33 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.movieappmad24.models.Movie
-import com.example.movieappmad24.models.getMovies
+import com.example.movieappmad24.models.MovieWithImages
 import com.example.movieappmad24.navigation.Screen
-import com.example.movieappmad24.viewmodels.MoviesViewModel
-
+import com.example.movieappmad24.interfaces.MoviesViewModel
+import com.example.movieappmad24.models.MovieImage
+import kotlinx.coroutines.awaitAll
+import okhttp3.internal.wait
 
 @Composable
 fun MovieList(
+    movies : List<MovieWithImages>,
     modifier: Modifier,
-    movies: List<Movie> = getMovies(),
     navController: NavController,
     viewModel: MoviesViewModel
 ){
     LazyColumn(modifier = modifier) {
-        items(movies) { movie ->
-            MovieRow(
-                movie = movie,
-                onFavoriteClick = {movieId ->
-                    viewModel.toggleFavoriteMovie(movieId)
-                },
-                onItemClick = { movieId ->
-                    navController.navigate(route = Screen.DetailScreen.withId(movieId))
-                }
-            )
+        if (movies.isNotEmpty()) {
+            items(movies) { movieWithImages ->
+
+                MovieRow(
+                    movieWithImages = movieWithImages,
+                    onFavoriteClick = {viewModel.updateFavorite(movieWithImages.movie)
+                    },
+                    onItemClick = {
+                        navController.navigate(route = Screen.DetailScreen.withId(id = movieWithImages.movie.dbId.toString()))
+                    }
+                )
+            }
         }
     }
 }
@@ -81,15 +86,16 @@ fun MovieList(
 @Composable
 fun MovieRow(
     modifier: Modifier = Modifier,
-    movie: Movie,
+    movieWithImages: MovieWithImages,
     onFavoriteClick: (String) -> Unit = {},
     onItemClick: (String) -> Unit = {}
 ){
+
     Card(modifier = modifier
         .fillMaxWidth()
         .padding(5.dp)
         .clickable {
-            onItemClick(movie.id)
+            onItemClick(movieWithImages.movie.id)
         },
         shape = ShapeDefaults.Large,
         elevation = CardDefaults.cardElevation(10.dp)
@@ -97,12 +103,12 @@ fun MovieRow(
         Column {
 
             MovieCardHeader(
-                imageUrl = movie.images[0],
-                isFavorite = movie.isFavorite,
-                onFavoriteClick = { onFavoriteClick(movie.id) }
+                imageUrl =  if (movieWithImages.movieImages.isNotEmpty()) movieWithImages.movieImages[0].url else "",
+                movieWithImages = movieWithImages,
+                onFavoriteClick = { onFavoriteClick(movieWithImages.movie.id) }
             )
 
-            MovieDetails(modifier = modifier.padding(12.dp), movie = movie)
+            MovieDetails(modifier = modifier.padding(12.dp), movie = movieWithImages.movie)
 
         }
     }
@@ -111,8 +117,9 @@ fun MovieRow(
 @Composable
 fun MovieCardHeader(
     imageUrl: String,
-    isFavorite: Boolean = false,
+    movieWithImages: MovieWithImages,
     onFavoriteClick: () -> Unit = {}
+
 ) {
     Box(
         modifier = Modifier
@@ -123,7 +130,7 @@ fun MovieCardHeader(
 
         MovieImage(imageUrl)
 
-        FavoriteIcon(isFavorite = isFavorite, onFavoriteClick)
+        FavoriteIcon(movieWithImages = movieWithImages, onFavoriteClick)
     }
 }
 
@@ -144,7 +151,7 @@ fun MovieImage(imageUrl: String){
 
 @Composable
 fun FavoriteIcon(
-    isFavorite: Boolean,
+    movieWithImages: MovieWithImages,
     onFavoriteClick: () -> Unit = {}
 ) {
     Box(
@@ -156,16 +163,14 @@ fun FavoriteIcon(
         Icon(
             modifier = Modifier.clickable {
                 onFavoriteClick()
-                Log.i("MovieWidget", "icon clicked")
-                                          },
+            },
             tint = MaterialTheme.colorScheme.secondary,
             imageVector =
-            if (isFavorite) {
+            if (movieWithImages.movie.isFavorite) {
                 Icons.Filled.Favorite
             } else {
                 Icons.Default.FavoriteBorder
             },
-
             contentDescription = "Add to favorites")
     }
 }
@@ -176,7 +181,6 @@ fun MovieDetails(modifier: Modifier, movie: Movie) {
     var showDetails by remember {
         mutableStateOf(false)
     }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -223,9 +227,9 @@ fun MovieDetails(modifier: Modifier, movie: Movie) {
 
 
 @Composable
-fun HorizontalScrollableImageView(movie: Movie) {
+fun HorizontalScrollableImageView(movieWithImages: MovieWithImages) {
     LazyRow {
-        items(movie.images) { image ->
+        items(movieWithImages.movieImages) { image ->
             Card(
                 modifier = Modifier
                     .padding(12.dp)
@@ -235,7 +239,7 @@ fun HorizontalScrollableImageView(movie: Movie) {
 
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(image)
+                        .data(image.url)
                         .crossfade(true)
                         .build(),
                     contentDescription = "Movie poster",
